@@ -2,17 +2,15 @@ import xml.etree.ElementTree as et
 import nltk
 from nltk.corpus import stopwords
 import math
+import operator
 
 data = []
 path = "wiki_data.xml"
 
-# get an iterable
 context = et.iterparse(path, events=("start", "end"))
 
-# turn it into an iterator
 context = iter(context)
 
-# get the root element
 ev, root = next(context)
 i = 0
 
@@ -22,13 +20,16 @@ words_in_articles = dict()
 stop_words = set(stopwords.words('english'))
 tfidf = dict()
 punctuation_mark = [',',';','!','?',':','(',')','.','[',']','{','}','<','>','=']
-allowed_tags = ['VB', 'NN', 'NNS', 'NNP', 'NNPS', 'FW', 'JJ', 'VBD', 'VBP']
+allowed_tags = ['VB', 'NN', 'NNS', 'NNP', 'NNPS', 'FW', 'JJ', 'VBD', 'VBP', 'CD']
 top_words = dict()
 
-read = 0
+test_data = []
 
+read = 0
+titles = []
+base = ""
 for ev, el in context:
-    if read < 5000:
+    if read < 4500:
         if 'text' in el.tag:
             s = str(el.text)
             if 'redirect' not in s and 'REDIRECT' not in s and s != 'None':
@@ -54,11 +55,19 @@ for ev, el in context:
                         else:
                             words_count[tagged_word[0]] = 1
             root.clear()
+        if 'title' in el.tag:
+            titles.append(el.text)
     else:
-        break
+        if read < 5000:
+            if 'text' in el.tag:
+                s = str(el.text)
+                if 'redirect' not in s and 'REDIRECT' not in s and s != 'None':
+                    test_data.append(s)
+                    read += 1
+        else:
+            break
 
-
-for article in articles:
+for article in test_data:
     words_in_artic = dict()
     s = article.lower()
     words = []
@@ -77,25 +86,64 @@ for article in articles:
     for word in words:
         tfidf[word] = words_in_artic[word] * math.log(len(articles)/words_in_articles[word])
 
-    tfidf_in_doc = dict()
-    for word in words_in_artic:
-        tfidf_in_doc[word] = tfidf[word]
-
-    tfidf_in_doc = dict(sorted(tfidf_in_doc.items(), key=lambda item: item[1],reverse=True))
-
-    counter = len(tfidf) * 3 // 50
-
-    for x in list(tfidf_in_doc.items())[:counter]:
-        if x[0] in top_words:
-            top_words[x[0]] += 1
-        else:
-            top_words[x[0]] = 1
 
 keyphrases = dict()
 
-for word in top_words:
-        keyphrases[word] = top_words[word] / words_in_articles[word]
+
+for article in articles:
+    article = article.split(" ")
+    keyphrase_in_article = []
+    s = ""
+    multiple_word = 0
+    for word in article:
+        if multiple_word:
+            if "]]" in word:
+                s += " " + word.replace("]]","")
+                if s not in keyphrase_in_article:
+                    keyphrase_in_article.append(s)
+                multiple_word = 0
+                s = ""
+            else:
+                s = word.replace("[[", "")
+                multiple_word = 1
+        else:
+            if "[[" in word:
+                if "]]" in word:
+                    w = word.replace("[[","").replace("]]","")
+                    if w not in keyphrase_in_article:
+                        keyphrase_in_article.append(w)
+                else:
+                    s += word.replace("[[","")
+                    multiple_word = 1
+
+    for keyphrase in keyphrase_in_article:
+        if keyphrase in keyphrases:
+            keyphrases[keyphrase] += 1
+        else:
+            keyphrases[keyphrase] = 1
+
+p = dict()
 
 for word in keyphrases:
-    if word in tfidf:
-        print(keyphrases[word],tfidf[word]  )
+    if word in words_in_articles:
+        p[word] = keyphrases[word] / words_in_articles[word]
+
+p = sorted(p.items(), key=operator.itemgetter(1))
+
+range = len(p) * 3//50
+
+links = dict()
+counter = 0
+
+for x in p:
+    if counter == range:
+        break
+    else:
+        if x in titles:
+            links[x] = titles[x]
+            counter += 1
+
+print('hello')
+
+
+
